@@ -3,6 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
 import MainLayout from "../components/layout/MainLayout";
 
+import { useDispatch, useSelector } from "react-redux";
+import toast from "react-hot-toast";
+import { registerThunk } from "../store/authSlice";
+
 const passwordRequirements = [
   { label: "At least 8 characters", check: (p) => p.length >= 8 },
   { label: "Contains a number", check: (p) => /\d/.test(p) },
@@ -15,38 +19,62 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
+  const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  // যদি আপনার slice এ isLoading/error থাকে
+  const { isLoading } = useSelector((s) => s.auth);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!name || !email || !password || !confirmPassword) {
-      alert("Please fill in all fields");
+      toast.error("Please fill in all fields");
       return;
     }
 
     if (password !== confirmPassword) {
-      alert("Passwords do not match");
+      toast.error("Passwords do not match");
       return;
     }
 
     if (password.length < 8) {
-      alert("Password must be at least 8 characters");
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
-    setIsLoading(true);
+    // Optional: password requirements check (number + uppercase)
+    const allOk = passwordRequirements.every((r) => r.check(password));
+    if (!allOk) {
+      toast.error("Password does not meet requirements");
+      return;
+    }
 
-    // TODO: connect redux/backend here
-    // Example:
-    // await dispatch(registerThunk({ name, email, password })).unwrap();
+    try {
+      // Toast with loading state
+      const promise = dispatch(
+        registerThunk({ name, email, password })
+      ).unwrap();
 
-    await new Promise((r) => setTimeout(r, 900)); // demo delay
-    setIsLoading(false);
+      toast.promise(promise, {
+        loading: "Creating account...",
+        success: "Account created successfully!",
+        error: (msg) => msg || "Registration failed",
+      });
 
-    navigate("/");
+      await promise;
+
+      // clear form (optional)
+      setName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+
+      navigate("/");
+    } catch (err) {
+      // error already shown by toast.promise
+    }
   };
 
   return (

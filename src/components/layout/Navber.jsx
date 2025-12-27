@@ -1,37 +1,41 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Search, ShoppingBag, User, Menu, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { ShoppingBag, User, Menu, X } from "lucide-react";
 import { cn } from "../../lib/util";
+import useAuth from "../../hooks/useauth";
+
+import { useDispatch, useSelector } from "react-redux";
+import { fetchCart, selectCartItems } from "../../store/cartSlice";
+
 const navLinks = [
   { name: "Home", path: "/" },
   { name: "Shop", path: "/shop" },
   { name: "About", path: "/about" },
   { name: "Contact", path: "/contact" },
 ];
-export default function Navbar({
-  isAuthenticated = false,
-  cartCount = 0,
-  onCartClick = () => {},
-}) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const navigate = useNavigate();
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(searchQuery.trim())}`);
-      setIsSearchOpen(false);
-      setSearchQuery("");
-    }
-  };
+export default function Navbar({ onCartClick = () => {} }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
+
+  const dispatch = useDispatch();
+  const items = useSelector(selectCartItems);
+
+  // cartCount = total quantity
+  const cartCount = (items || []).reduce(
+    (sum, it) => sum + (it.quantity || 0),
+    0
+  );
+
+  // Navbar load hobar sathe sathe cart fetch (so badge visible)
+  useEffect(() => {
+    dispatch(fetchCart());
+  }, [dispatch]);
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
       <nav className="container-custom">
         <div className="flex items-center justify-between h-16 lg:h-20">
-          {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="lg:hidden p-2 -ml-2 text-foreground hover:text-primary transition-colors"
@@ -44,7 +48,6 @@ export default function Navbar({
             )}
           </button>
 
-          {/* Logo */}
           <Link
             to="/"
             className="font-serif text-2xl lg:text-3xl font-semibold tracking-tight text-foreground hover:text-primary transition-colors"
@@ -52,7 +55,6 @@ export default function Navbar({
             Lumière
           </Link>
 
-          {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-8">
             {navLinks.map((link) => (
               <Link
@@ -65,27 +67,16 @@ export default function Navbar({
             ))}
           </div>
 
-          {/* Right Side Icons */}
           <div className="flex items-center gap-2 lg:gap-4">
-            {/* Search */}
-            <button
-              onClick={() => setIsSearchOpen(!isSearchOpen)}
-              className="p-2 text-foreground hover:text-primary transition-colors"
-              aria-label="Search"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-
-            {/* User */}
             <Link
               to={isAuthenticated ? "/profile" : "/login"}
               className="p-2 text-foreground hover:text-primary transition-colors"
               aria-label="Account"
+              onClick={() => setIsMenuOpen(false)}
             >
               <User className="w-5 h-5" />
             </Link>
 
-            {/* Cart */}
             <button
               onClick={onCartClick}
               className="relative p-2 text-foreground hover:text-primary transition-colors"
@@ -101,32 +92,6 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div
-          className={cn(
-            "overflow-hidden transition-all duration-300 ease-in-out",
-            isSearchOpen ? "max-h-20 pb-4" : "max-h-0"
-          )}
-        >
-          <form onSubmit={handleSearch} className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search products..."
-              className="input-field pr-12"
-              autoFocus={isSearchOpen}
-            />
-            <button
-              type="submit"
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-          </form>
-        </div>
-
-        {/* Mobile Menu */}
         <div
           className={cn(
             "lg:hidden overflow-hidden transition-all duration-300 ease-in-out",

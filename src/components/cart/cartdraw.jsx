@@ -1,66 +1,105 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { X, Plus, Minus, ShoppingBag } from "lucide-react";
+import { X, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  fetchCart,
+  updateCartItem,
+  removeCartItem,
+  selectCartItems,
+  selectCartSubtotal,
+  selectCartLoading,
+} from "../../store/cartSlice";
+
+function formatMoney(amount, currency = "INR", locale = "en-IN") {
+  const n = Number(amount || 0);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return `${currency} ${n.toFixed(2)}`;
+  }
+}
 
 export default function CartDrawer({ isOpen, onClose }) {
-  const [items, setItems] = useState([
-    {
-      key: "1-M-Black",
-      product: {
-        id: 1,
-        name: "Premium Cotton T-Shirt",
-        price: 49.99,
-        images: [
-          "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=800&fit=crop",
-        ],
-      },
-      selectedSize: "M",
-      selectedColor: "Black",
-      quantity: 1,
-    },
-    {
-      key: "4-NA-Cognac",
-      product: {
-        id: 4,
-        name: "Leather Crossbody Bag",
-        price: 159.0,
-        images: [
-          "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=600&h=800&fit=crop",
-        ],
-      },
-      selectedSize: null,
-      selectedColor: "Cognac",
-      quantity: 1,
-    },
-  ]);
+  const dispatch = useDispatch();
 
-  const { totalItems, totalPrice } = useMemo(() => {
-    const totalItems = items.reduce((sum, it) => sum + it.quantity, 0);
-    const totalPrice = items.reduce(
-      (sum, it) => sum + it.quantity * it.product.price,
+  const items = useSelector(selectCartItems);
+  const subtotal = useSelector(selectCartSubtotal);
+  const loading = useSelector(selectCartLoading);
+
+  useEffect(() => {
+    if (isOpen) dispatch(fetchCart());
+  }, [isOpen, dispatch]);
+
+  const { totalItems } = useMemo(() => {
+    const totalItems = (items || []).reduce(
+      (sum, it) => sum + (it.quantity || 0),
       0
     );
-    return { totalItems, totalPrice };
+    return { totalItems };
   }, [items]);
 
-  const removeItem = (key) => {
-    setItems((prev) => prev.filter((it) => it.key !== key));
+  const getProduct = (item) => item?.variantId?.productId;
+
+  const getImage = (item) => {
+    const product = getProduct(item);
+    const imgObj =
+      Array.isArray(product?.images) && product.images.length > 0
+        ? product.images[0]
+        : null;
+    const url = typeof imgObj === "string" ? imgObj : imgObj?.url;
+    return url || "https://via.placeholder.com/600x800?text=No+Image";
   };
 
-  const updateQuantity = (key, nextQty) => {
-    setItems((prev) =>
-      prev
-        .map((it) => (it.key === key ? { ...it, quantity: nextQty } : it))
-        .filter((it) => it.quantity > 0)
-    );
+  const getProductName = (item) => getProduct(item)?.name || "Item";
+
+  const getVariantTitle = (item) => {
+    const t = item?.title || item?.variantId?.title || "";
+    if (!t) return "";
+    if (String(t).trim().toLowerCase() === "default") return "";
+    return t;
+  };
+
+  const getSlug = (item) => getProduct(item)?.slug;
+
+  const getUnitPrice = (item) =>
+    item?.unitPrice?.amount ?? item?.variantId?.price?.amount ?? 0;
+
+  const getCurrency = (item) =>
+    item?.unitPrice?.currency ?? item?.variantId?.price?.currency ?? "INR";
+
+  const getOptionsText = (item) => {
+    const options = item?.options || item?.variantId?.options || [];
+    if (!Array.isArray(options) || options.length === 0) return "";
+    return options.map((op) => `${op.name}: ${op.value}`).join(" • ");
+  };
+
+  const onDec = (item) => {
+    const nextQty = (item.quantity || 0) - 1;
+    if (nextQty <= 0) dispatch(removeCartItem({ itemId: item._id }));
+    else dispatch(updateCartItem({ itemId: item._id, quantity: nextQty }));
+  };
+
+  const onInc = (item) => {
+    const nextQty = (item.quantity || 0) + 1;
+    dispatch(updateCartItem({ itemId: item._id, quantity: nextQty }));
+  };
+
+  const onRemove = (item) => {
+    dispatch(removeCartItem({ itemId: item._id }));
   };
 
   const backdropClass =
-    "fixed inset-0 bg-black/30 backdrop-blur-sm z-50 transition-opacity duration-300 " +
+    "fixed inset-0 z-50 bg-black/30 backdrop-blur-sm transition-opacity duration-300 " +
     (isOpen ? "opacity-100" : "opacity-0 pointer-events-none");
 
   const drawerClass =
-    "fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl z-50 transform transition-transform duration-300 ease-out " +
+    "fixed right-0 top-0 z-50 h-full w-full max-w-md transform transition-transform duration-300 ease-out " +
+    "bg-background shadow-2xl " +
     (isOpen ? "translate-x-0" : "translate-x-full");
 
   return (
@@ -69,147 +108,223 @@ export default function CartDrawer({ isOpen, onClose }) {
       <div className={backdropClass} onClick={onClose} />
 
       {/* Drawer */}
-      <div className={drawerClass}>
+      <aside
+        className={drawerClass}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Cart drawer"
+      >
         <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 lg:p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold">Your Cart ({totalItems})</h2>
-            <button
-              onClick={onClose}
-              className="p-2 -mr-2 text-gray-500 hover:text-gray-900 transition-colors"
-              aria-label="Close cart"
-            >
-              <X className="w-5 h-5" />
-            </button>
+          {/* Header (sticky) */}
+          <div className="sticky top-0 z-10 bg-background/90 backdrop-blur border-b border-border">
+            <div className="flex items-center justify-between px-4 py-4 lg:px-6">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Cart</h2>
+                <p className="text-xs text-muted-foreground">
+                  {totalItems} item{totalItems === 1 ? "" : "s"}
+                </p>
+              </div>
+
+              <button
+                onClick={onClose}
+                className="p-2 rounded-full hover:bg-muted transition-colors"
+                aria-label="Close cart"
+                title="Close"
+              >
+                <X className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
           </div>
 
-          {/* Cart Items */}
-          <div className="flex-1 overflow-y-auto p-4 lg:p-6">
-            {items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <ShoppingBag className="w-16 h-16 text-gray-400/70 mb-4" />
-                <p className="text-lg font-medium text-gray-900 mb-2">
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6">
+            {loading && (!items || items.length === 0) ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((k) => (
+                  <div key={k} className="flex gap-4 animate-pulse">
+                    <div className="w-20 rounded-xl bg-muted aspect-[4/5]" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-3/4 bg-muted rounded" />
+                      <div className="h-4 w-1/2 bg-muted rounded" />
+                      <div className="h-4 w-24 bg-muted rounded" />
+                      <div className="h-8 w-40 bg-muted rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : !items || items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-16">
+                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                  <ShoppingBag className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <p className="text-lg font-semibold text-foreground">
                   Your cart is empty
                 </p>
-                <p className="text-sm text-gray-500 mb-6">
-                  Looks like you haven't added anything yet.
+                <p className="text-sm text-muted-foreground mt-1 mb-6">
+                  Add products to see them here.
                 </p>
+
                 <Link
                   to="/shop"
                   onClick={onClose}
-                  className="px-6 py-3 bg-black text-white rounded-md font-medium hover:opacity-90 transition"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition"
                 >
-                  Start Shopping
+                  Start shopping <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
             ) : (
               <ul className="space-y-4">
-                {items.map((item) => (
-                  <li key={item.key} className="flex gap-4">
-                    <Link
-                      to={`/product/${item.product.id}`}
-                      onClick={onClose}
-                      className="w-20 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-100"
+                {items.map((item) => {
+                  const slug = getSlug(item);
+                  const productLink = slug ? `/product/${slug}` : "#";
+                  const unit = getUnitPrice(item);
+                  const currency = getCurrency(item);
+                  const optionsText = getOptionsText(item);
+                  const productName = getProductName(item);
+                  const variantTitle = getVariantTitle(item);
+
+                  return (
+                    <li
+                      key={item._id}
+                      className="rounded-2xl bg-card shadow-sm p-3 lg:p-4"
                     >
-                      <img
-                        src={item.product.images[0]}
-                        alt={item.product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </Link>
-
-                    <div className="flex-1 min-w-0">
-                      <Link
-                        to={`/product/${item.product.id}`}
-                        onClick={onClose}
-                        className="font-medium text-gray-900 hover:underline line-clamp-1"
-                      >
-                        {item.product.name}
-                      </Link>
-
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {item.selectedSize && `Size: ${item.selectedSize}`}
-                        {item.selectedSize && item.selectedColor && " • "}
-                        {item.selectedColor && `Color: ${item.selectedColor}`}
-                      </p>
-
-                      <p className="font-medium text-gray-900 mt-1">
-                        ${item.product.price.toFixed(2)}
-                      </p>
-
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() =>
-                              updateQuantity(item.key, item.quantity - 1)
-                            }
-                            className="p-1 rounded-md border border-gray-200 hover:bg-gray-50 transition"
-                            aria-label="Decrease quantity"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-
-                          <span className="w-8 text-center text-sm font-medium">
-                            {item.quantity}
-                          </span>
-
-                          <button
-                            onClick={() =>
-                              updateQuantity(item.key, item.quantity + 1)
-                            }
-                            className="p-1 rounded-md border border-gray-200 hover:bg-gray-50 transition"
-                            aria-label="Increase quantity"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <button
-                          onClick={() => removeItem(item.key)}
-                          className="text-sm text-gray-500 hover:text-red-600 transition"
+                      <div className="flex gap-4">
+                        <Link
+                          to={productLink}
+                          onClick={onClose}
+                          className="w-20 rounded-xl overflow-hidden bg-muted flex-shrink-0 aspect-[4/5]"
+                          aria-label={productName}
                         >
-                          Remove
-                        </button>
+                          <img
+                            src={getImage(item)}
+                            alt={productName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src =
+                                "https://via.placeholder.com/600x800?text=No+Image";
+                            }}
+                          />
+                        </Link>
+
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            to={productLink}
+                            onClick={onClose}
+                            className="font-medium text-foreground hover:underline line-clamp-1"
+                          >
+                            {productName}
+                          </Link>
+
+                          {variantTitle ? (
+                            <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">
+                              {variantTitle}
+                            </p>
+                          ) : null}
+
+                          {optionsText ? (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                              {optionsText}
+                            </p>
+                          ) : null}
+
+                          <div className="flex items-center justify-between mt-2">
+                            <p className="font-semibold text-foreground">
+                              {formatMoney(unit, currency)}
+                            </p>
+
+                            <button
+                              onClick={() => onRemove(item)}
+                              disabled={loading}
+                              className="text-xs text-muted-foreground hover:text-destructive transition disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-between">
+                            {/* Qty control */}
+                            <div className="inline-flex items-center rounded-lg bg-muted">
+                              <button
+                                onClick={() => onDec(item)}
+                                disabled={loading}
+                                className="p-2 rounded-l-lg hover:bg-muted/80 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                aria-label="Decrease quantity"
+                                title="Decrease"
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+
+                              <span className="w-10 text-center text-sm font-medium text-foreground">
+                                {item.quantity}
+                              </span>
+
+                              <button
+                                onClick={() => onInc(item)}
+                                disabled={loading}
+                                className="p-2 rounded-r-lg hover:bg-muted/80 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                aria-label="Increase quantity"
+                                title="Increase"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Line total (nice touch) */}
+                            <p className="text-sm text-muted-foreground">
+                              {formatMoney(
+                                Number(unit) * Number(item.quantity || 0),
+                                currency
+                              )}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
 
-          {/* Footer */}
-          {items.length > 0 && (
-            <div className="p-4 lg:p-6 border-t border-gray-200 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500">Subtotal</span>
-                <span className="text-lg font-semibold">
-                  ${totalPrice.toFixed(2)}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                Shipping and taxes calculated at checkout.
-              </p>
-              <div className="grid gap-3">
-                <Link
-                  to="/checkout"
-                  onClick={onClose}
-                  className="w-full py-3 bg-black text-white rounded-md font-medium text-center hover:opacity-90 transition"
-                >
-                  Checkout
-                </Link>
-                <Link
-                  to="/cart"
-                  onClick={onClose}
-                  className="w-full py-3 bg-gray-100 text-gray-900 rounded-md font-medium text-center hover:bg-gray-200 transition"
-                >
-                  View Cart
-                </Link>
+          {/* Footer (sticky) */}
+          {items && items.length > 0 && (
+            <div className="sticky bottom-0 bg-background/90 backdrop-blur border-t border-border">
+              <div className="px-4 py-4 lg:px-6 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">
+                    Subtotal
+                  </span>
+                  <span className="text-lg font-semibold text-foreground">
+                    {formatMoney(subtotal || 0, "INR")}
+                  </span>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Shipping & taxes calculated at checkout.
+                </p>
+
+                <div className="grid gap-3">
+                  <Link
+                    to="/checkout"
+                    onClick={onClose}
+                    className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-medium text-center hover:opacity-90 transition"
+                  >
+                    Checkout
+                  </Link>
+
+                  <Link
+                    to="/cart"
+                    onClick={onClose}
+                    className="w-full py-3 rounded-lg bg-muted text-foreground font-medium text-center hover:bg-muted/80 transition"
+                  >
+                    View cart
+                  </Link>
+                </div>
               </div>
             </div>
           )}
         </div>
-      </div>
+      </aside>
     </>
   );
 }

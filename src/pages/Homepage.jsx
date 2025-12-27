@@ -1,10 +1,14 @@
+import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { ArrowRight, Truck, Shield, RefreshCw, Sparkles } from "lucide-react";
+
 import MainLayout from "../components/layout/MainLayout";
 import ProductCard from "../components/product/productCard";
-import { products, categories } from "../data/product";
 import HeroCarousel from "./Herosection";
-const featuredProducts = products.filter((p) => p.featured).slice(0, 4);
+
+import { fetchCategoriesThunk, fetchProductsThunk } from "../store/storSlice";
+
 const features = [
   { icon: Truck, title: "Free Shipping", description: "On orders over $100" },
   {
@@ -25,9 +29,30 @@ const features = [
 ];
 
 export default function HomePage() {
+  const dispatch = useDispatch();
+
+  const { categories, categoriesLoading, products, productsLoading, error } =
+    useSelector((s) => s.store);
+
+  // load categories + featured products
+  useEffect(() => {
+    dispatch(fetchCategoriesThunk({ withCounts: true }));
+    dispatch(
+      fetchProductsThunk({
+        featured: true,
+        sort: "featured",
+        page: 1,
+        limit: 4,
+      })
+    );
+  }, [dispatch]);
+
+  // featured products list from store.products (because we fetched only featured)
+  const featuredProducts = useMemo(() => products || [], [products]);
+
   return (
     <MainLayout>
-      {/* Hero */}
+      {/* Hero Section */}
       <HeroCarousel />
 
       {/* Features Bar */}
@@ -57,7 +82,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Categories */}
+      {/* Categories Section */}
       <section className="py-16 lg:py-24">
         <div className="container-custom">
           <div className="text-center mb-12">
@@ -70,32 +95,43 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-            {categories.map((category, index) => (
-              <Link
-                key={category.id}
-                to={`/shop?category=${category.id}`}
-                className="group relative aspect-[3/4] rounded-xl overflow-hidden animate-fade-up"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <img
-                  src={category.image}
-                  alt={category.name}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  onError={(e) => (e.currentTarget.src = "/fallback.jpg")}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-foreground/20 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-4 lg:p-6">
-                  <h3 className="text-xl lg:text-2xl font-serif font-semibold text-background mb-1">
-                    {category.name}
-                  </h3>
-                  <p className="text-sm text-background/80">
-                    {category.productCount} Products
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
+          {error && (
+            <div className="text-center mb-6">
+              <p className="text-destructive">{error}</p>
+            </div>
+          )}
+
+          {categoriesLoading ? (
+            <div className="text-center py-10 text-muted-foreground">
+              Loading categories...
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+              {(categories || []).map((category, index) => (
+                <Link
+                  key={category._id}
+                  to={`/shop?category=${category.key || category._id}`}
+                  className="group relative aspect-[3/4] rounded-xl overflow-hidden animate-fade-up"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <img
+                    src={category.image}
+                    alt={category.name}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-foreground/20 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4 lg:p-6">
+                    <h3 className="text-xl lg:text-2xl font-serif font-semibold text-background mb-1">
+                      {category.name}
+                    </h3>
+                    <p className="text-sm text-background/80">
+                      {category.productCount ?? 0} Products
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -122,17 +158,23 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-            {featuredProducts.map((product, index) => (
-              <div
-                key={product.id}
-                className="animate-fade-up"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <ProductCard product={product} />
-              </div>
-            ))}
-          </div>
+          {productsLoading ? (
+            <div className="text-center py-10 text-muted-foreground">
+              Loading featured products...
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+              {featuredProducts.map((product, index) => (
+                <div
+                  key={product._id}
+                  className="animate-fade-up"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <ProductCard product={product} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -164,7 +206,6 @@ export default function HomePage() {
                     placeholder="Enter your email"
                     className="flex-1 px-4 py-3 rounded-md bg-background/95 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
-
                   <button
                     type="submit"
                     className="px-6 py-3 rounded-md bg-primary text-primary-foreground font-medium hover:opacity-90 transition"

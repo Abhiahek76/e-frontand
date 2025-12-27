@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -9,137 +9,250 @@ import {
 } from "lucide-react";
 import { heroSlides } from "../data/product";
 
-const HeroCarousel = () => {
+const AUTOPLAY_MS = 4000;
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    const m = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!m) return;
+
+    const onChange = () => setReduced(!!m.matches);
+    onChange();
+
+    if (m.addEventListener) m.addEventListener("change", onChange);
+    else m.addListener?.(onChange);
+
+    return () => {
+      if (m.removeEventListener) m.removeEventListener("change", onChange);
+      else m.removeListener?.(onChange);
+    };
+  }, []);
+
+  return reduced;
+}
+
+export default function HeroCarousel() {
+  const reducedMotion = usePrefersReducedMotion();
+
+  const slides = Array.isArray(heroSlides) ? heroSlides.filter(Boolean) : [];
+  const total = slides.length;
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  const sectionRef = useRef(null);
+  const touchStartX = useRef(null);
+
+  // remember play state when tab hidden
+  const wasPlayingRef = useRef(true);
+
+  const safeIndex = total ? ((currentSlide % total) + total) % total : 0;
+  const slide = useMemo(
+    () => (total ? slides[safeIndex] : null),
+    [slides, safeIndex, total]
+  );
+
+  // preload
+  useEffect(() => {
+    slides.slice(0, 3).forEach((s) => {
+      if (!s?.image) return;
+      const img = new Image();
+      img.src = s.image;
+    });
+  }, [slides]);
 
   const goToSlide = useCallback(
     (index) => {
-      if (isTransitioning) return;
-      setIsTransitioning(true);
-      setCurrentSlide(index);
-      setTimeout(() => setIsTransitioning(false), 600);
+      if (!total) return;
+      const next = ((index % total) + total) % total;
+      setCurrentSlide(next);
     },
-    [isTransitioning]
+    [total]
   );
 
   const nextSlide = useCallback(() => {
-    goToSlide((currentSlide + 1) % heroSlides.length);
-  }, [currentSlide, goToSlide]);
+    if (!total) return;
+    setCurrentSlide((prev) => (prev + 1) % total);
+  }, [total]);
 
   const prevSlide = useCallback(() => {
-    goToSlide((currentSlide - 1 + heroSlides.length) % heroSlides.length);
-  }, [currentSlide, goToSlide]);
+    if (!total) return;
+    setCurrentSlide((prev) => (prev - 1 + total) % total);
+  }, [total]);
 
+  //  Autoplay (setTimeout loop = reliable)
   useEffect(() => {
+    if (!total) return;
     if (!isPlaying) return;
-    const interval = setInterval(nextSlide, 5000);
-    return () => clearInterval(interval);
-  }, [isPlaying, nextSlide]);
 
-  const slide = heroSlides[currentSlide];
+    // keep autoplay even if reducedMotion is on
+    const id = setTimeout(() => {
+      setCurrentSlide((prev) => (prev + 1) % total);
+    }, AUTOPLAY_MS);
+
+    return () => clearTimeout(id);
+  }, [isPlaying, total, currentSlide]);
+
+  // Pause when hidden + resume when visible
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden) {
+        wasPlayingRef.current = isPlaying;
+        setIsPlaying(false);
+      } else {
+        setIsPlaying(wasPlayingRef.current);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [isPlaying]);
+
+  // keyboard
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+
+    const onKeyDown = (e) => {
+      if (e.key === "ArrowLeft") prevSlide();
+      if (e.key === "ArrowRight") nextSlide();
+    };
+
+    el.addEventListener("keydown", onKeyDown);
+    return () => el.removeEventListener("keydown", onKeyDown);
+  }, [nextSlide, prevSlide]);
+
+  // swipe
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches?.[0]?.clientX ?? null;
+  };
+  const onTouchEnd = (e) => {
+    const start = touchStartX.current;
+    const end = e.changedTouches?.[0]?.clientX ?? null;
+    if (start == null || end == null) return;
+
+    const dx = end - start;
+    if (Math.abs(dx) < 40) return;
+
+    if (dx > 0) prevSlide();
+    else nextSlide();
+
+    touchStartX.current = null;
+  };
+
+  if (!slide) {
+    return (
+      <section className="container-custom py-16">
+        <div className="rounded-2xl bg-muted p-8 text-center">
+          <p className="text-foreground font-medium">No hero slides found.</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Please check <code>heroSlides</code> data.
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className="relative min-h-[85vh] lg:min-h-[90vh] overflow-hidden">
-      {/* Background Images */}
-      {heroSlides.map((s, index) => (
-        <div
-          key={s.id}
-          className={`absolute inset-0 transition-opacity duration-700 ${
-            index === currentSlide ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <img
-            src={s.image}
-            alt={s.heading}
-            className="w-full h-full object-cover scale-105"
-            onError={(e) => {
-              e.currentTarget.src = "/fallback.jpg";
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-foreground/70 via-foreground/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-transparent to-transparent" />
-        </div>
-      ))}
-
-      {/* Content */}
-      <div className="relative container-custom h-full min-h-[85vh] lg:min-h-[90vh] flex items-center">
-        <div className="max-w-2xl py-20 lg:py-0">
-          {/* Subtitle Badge */}
+    <section
+      ref={sectionRef}
+      tabIndex={0}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      className="relative overflow-hidden outline-none
+             h-[70svh] md:h-[75vh] lg:h-[88vh]"
+      aria-label="Hero carousel"
+    >
+      {/* background (no click blocking) */}
+      {slides.map((s, index) => {
+        const active = index === safeIndex;
+        return (
           <div
-            key={`badge-${currentSlide}`}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-background/10 backdrop-blur-sm text-background text-sm font-medium mb-6 animate-fade-up"
+            key={s.id ?? index}
+            className={[
+              "absolute inset-0 transition-opacity duration-700 pointer-events-none",
+              active ? "opacity-100" : "opacity-0",
+            ].join(" ")}
+            aria-hidden={!active}
           >
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
+            <img
+              src={s.image}
+              alt={s.heading}
+              className={[
+                "w-full h-full object-cover",
+                reducedMotion ? "" : "scale-105",
+              ].join(" ")}
+              loading={active ? "eager" : "lazy"}
+              onError={(e) => (e.currentTarget.src = "/fallback.jpg")}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+          </div>
+        );
+      })}
+
+      {/* content */}
+      <div className="relative container-custom h-screen flex items-center">
+        <div className="max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-background/15 backdrop-blur-sm text-background text-sm font-medium mb-6">
+            <span className="w-2 h-2 rounded-full bg-primary" />
             {slide.subtitle} • {slide.title}
           </div>
 
-          {/* Heading */}
-          <h1
-            key={`heading-${currentSlide}`}
-            className="text-4xl sm:text-5xl lg:text-7xl font-serif font-semibold text-background leading-[1.1] mb-6 animate-fade-up stagger-1"
-          >
+          <h1 className="text-4xl sm:text-5xl lg:text-7xl font-serif font-semibold text-background leading-[1.08] mb-6">
             {slide.heading}
           </h1>
 
-          {/* Description */}
-          <p
-            key={`desc-${currentSlide}`}
-            className="text-lg lg:text-xl text-background/85 max-w-lg mb-8 animate-fade-up stagger-2"
-          >
+          <p className="text-lg lg:text-xl text-background/85 max-w-lg mb-8">
             {slide.description}
           </p>
 
-          {/* CTA Buttons */}
-          <div
-            key={`cta-${currentSlide}`}
-            className="flex flex-col sm:flex-row gap-4 animate-fade-up stagger-3"
-          >
-            {/* Primary */}
+          <div className="flex flex-col sm:flex-row gap-4">
             <Link
               to={slide.ctaLink}
-              className="group inline-flex items-center justify-center gap-2 px-6 py-3 rounded-md
-                         bg-background text-foreground font-medium text-base
-                         hover:opacity-90 transition"
+              className="group inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-base hover:opacity-90 transition"
             >
               {slide.cta}
               <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
             </Link>
 
-            {/* Secondary */}
             <Link
               to="/shop"
-              className="inline-flex items-center justify-center px-6 py-3 rounded-md
-                         border border-background/30 text-background font-medium
-                         hover:bg-background/10 hover:border-background/50 transition"
+              className="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-background/10 text-background font-medium hover:bg-background/15 transition"
             >
-              Browse All
+              Browse all
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Navigation Controls */}
-      <div className="absolute bottom-8 left-0 right-0 container-custom flex items-center justify-between">
-        {/* Dots & Play/Pause */}
+      {/* controls */}
+      <div className="absolute bottom-6 left-0 right-0 container-custom flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex gap-2">
-            {heroSlides.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
-                className={`carousel-dot ${
-                  index === currentSlide ? "carousel-dot-active" : ""
-                }`}
-                aria-label={`Go to slide ${index + 1}`}
-                type="button"
-              />
-            ))}
+            {slides.map((_, index) => {
+              const active = index === safeIndex;
+              return (
+                <button
+                  key={index}
+                  onClick={() => goToSlide(index)}
+                  className={[
+                    "h-2.5 rounded-full transition-all",
+                    active
+                      ? "w-8 bg-primary"
+                      : "w-2.5 bg-background/45 hover:bg-background/70",
+                  ].join(" ")}
+                  aria-label={`Go to slide ${index + 1}`}
+                  type="button"
+                />
+              );
+            })}
           </div>
 
           <button
-            onClick={() => setIsPlaying(!isPlaying)}
+            onClick={() => setIsPlaying((p) => !p)}
             className="p-2 rounded-full bg-background/10 backdrop-blur-sm text-background hover:bg-background/20 transition-colors"
             aria-label={isPlaying ? "Pause slideshow" : "Play slideshow"}
             type="button"
@@ -152,19 +265,19 @@ const HeroCarousel = () => {
           </button>
         </div>
 
-        {/* Arrows */}
         <div className="flex gap-2">
           <button
             onClick={prevSlide}
-            className="p-3 rounded-full bg-background/10 backdrop-blur-sm text-background hover:bg-background/20 transition-all hover:scale-105"
+            className="p-3 rounded-full bg-background/10 backdrop-blur-sm text-background hover:bg-background/20 transition-all hover:scale-[1.03]"
             aria-label="Previous slide"
             type="button"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
+
           <button
             onClick={nextSlide}
-            className="p-3 rounded-full bg-background/10 backdrop-blur-sm text-background hover:bg-background/20 transition-all hover:scale-105"
+            className="p-3 rounded-full bg-background/10 backdrop-blur-sm text-background hover:bg-background/20 transition-all hover:scale-[1.03]"
             aria-label="Next slide"
             type="button"
           >
@@ -173,16 +286,14 @@ const HeroCarousel = () => {
         </div>
       </div>
 
-      {/* Slide Counter */}
+      {/* counter */}
       <div className="absolute top-1/2 right-8 -translate-y-1/2 hidden lg:flex flex-col items-center gap-2 text-background/60">
         <span className="text-3xl font-serif font-semibold text-background">
-          0{currentSlide + 1}
+          {String(safeIndex + 1).padStart(2, "0")}
         </span>
         <div className="w-px h-12 bg-background/30" />
-        <span className="text-sm">0{heroSlides.length}</span>
+        <span className="text-sm">{String(total).padStart(2, "0")}</span>
       </div>
     </section>
   );
-};
-
-export default HeroCarousel;
+}

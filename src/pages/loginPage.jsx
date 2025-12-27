@@ -2,34 +2,67 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import MainLayout from "../components/layout/MainLayout";
+
+import { useDispatch, useSelector } from "react-redux";
+import toast from "react-hot-toast";
+import { loginThunk } from "../store/authSlice";
+import { mergeGuestCart, fetchCart } from "../store/cartSlice";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
+  const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  const { isLoading } = useSelector((s) => s.auth);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!email || !password) {
-      alert("Please fill in all fields");
+      toast.error("Please fill in all fields");
       return;
     }
 
-    setIsLoading(true);
+    try {
+      const promise = dispatch(
+        loginThunk({ email, password, rememberMe })
+      ).unwrap();
 
-    // TODO: connect redux/backend here
-    // Example:
-    // const res = await dispatch(loginThunk({ email, password })).unwrap();
+      toast.promise(promise, {
+        loading: "Signing in...",
+        success: "Signed in successfully!",
+        error: (msg) => msg || "Login failed",
+      });
 
-    await new Promise((r) => setTimeout(r, 800)); // demo delay
-    setIsLoading(false);
+      // ✅ wait login
+      await promise;
 
-    // demo success navigation
-    navigate("/");
+      // ✅ guest cart -> user cart merge
+      // (token already set via setAuthToken inside authSlice)
+      try {
+        await dispatch(mergeGuestCart()).unwrap();
+      } catch {
+        // merge fail হলেও login হবে, তাই silent
+      }
+
+      // ✅ refresh cart state for navbar/cart drawer
+      try {
+        await dispatch(fetchCart()).unwrap();
+      } catch {
+        // ignore
+      }
+
+      setEmail("");
+      setPassword("");
+
+      navigate("/");
+    } catch (err) {
+      // toast.promise already shows error
+    }
   };
 
   return (
