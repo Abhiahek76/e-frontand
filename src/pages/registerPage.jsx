@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
 import MainLayout from "../components/layout/MainLayout";
 
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { registerThunk } from "../store/authSlice";
+import { mergeGuestCart, fetchCart } from "../store/cartSlice";
 
 const passwordRequirements = [
   { label: "At least 8 characters", check: (p) => p.length >= 8 },
@@ -22,8 +23,8 @@ export default function RegisterPage() {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // যদি আপনার slice এ isLoading/error থাকে
   const { isLoading } = useSelector((s) => s.auth);
 
   const handleSubmit = async (e) => {
@@ -44,7 +45,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Optional: password requirements check (number + uppercase)
     const allOk = passwordRequirements.every((r) => r.check(password));
     if (!allOk) {
       toast.error("Password does not meet requirements");
@@ -52,7 +52,6 @@ export default function RegisterPage() {
     }
 
     try {
-      // Toast with loading state
       const promise = dispatch(
         registerThunk({ name, email, password })
       ).unwrap();
@@ -65,16 +64,23 @@ export default function RegisterPage() {
 
       await promise;
 
-      // clear form (optional)
+      try {
+        await dispatch(mergeGuestCart()).unwrap();
+      } catch (err) {}
+
+      try {
+        await dispatch(fetchCart()).unwrap();
+      } catch (err) {}
+
+      // clear form
       setName("");
       setEmail("");
       setPassword("");
       setConfirmPassword("");
 
-      navigate("/");
-    } catch (err) {
-      // error already shown by toast.promise
-    }
+      const from = location.state?.from || "/";
+      navigate(from, { replace: true });
+    } catch (err) {}
   };
 
   return (

@@ -38,31 +38,21 @@ export default function LoginPage() {
         error: (msg) => msg || "Login failed",
       });
 
-      // ✅ wait login
       await promise;
 
-      // ✅ guest cart -> user cart merge
-      // (token already set via setAuthToken inside authSlice)
       try {
         await dispatch(mergeGuestCart()).unwrap();
-      } catch {
-        // merge fail হলেও login হবে, তাই silent
-      }
-
-      // ✅ refresh cart state for navbar/cart drawer
+      } catch {}
       try {
         await dispatch(fetchCart()).unwrap();
-      } catch {
-        // ignore
-      }
+      } catch {}
 
       setEmail("");
       setPassword("");
 
-      navigate("/");
-    } catch (err) {
-      // toast.promise already shows error
-    }
+      const from = location.state?.from || "/";
+      navigate(from, { replace: true });
+    } catch (err) {}
   };
 
   return (

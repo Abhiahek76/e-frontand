@@ -234,7 +234,6 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     try {
       if (paymentMethod === "cod") {
-        // COD - এখানে চাইলে backend order create API thunk বানাতে পারো
         await new Promise((r) => setTimeout(r, 600));
         toast.success("Order placed ");
         await dispatch(clearCart()).unwrap();

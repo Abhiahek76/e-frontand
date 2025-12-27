@@ -229,8 +229,9 @@ export default function ProductDetailPage() {
     setQuantity((q) => Math.min(Math.max(1, q), maxQty));
   }, [maxQty]);
 
-  const currency = product?.currency || "INR";
-  const locale = product?.locale || "en-IN";
+  // ✅ Force USD + US locale (only change requested)
+  const currency = "USD";
+  const locale = "en-US";
 
   const displayPrice = selectedVariant?.price ?? product?.price ?? 0;
   const displayOriginalPrice =
@@ -265,7 +266,6 @@ export default function ProductDetailPage() {
 
     toast.promise(dispatch(addToCart({ variantId, quantity })).unwrap(), {
       loading: "Adding to cart...",
-      //no product name
       success: "Added to cart ",
       error: (err) => err?.message || "Failed to add to cart",
     });
@@ -792,7 +792,7 @@ export default function ProductDetailPage() {
                             {review.author} •{" "}
                             {review.date
                               ? new Date(review.date).toLocaleDateString(
-                                  "en-IN"
+                                  "en-US"
                                 )
                               : ""}
                           </p>
@@ -832,6 +832,7 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
+            {/* ✅ Only change requested: button text */}
             <button
               type="button"
               onClick={handleAddToCart}
@@ -839,7 +840,7 @@ export default function ProductDetailPage() {
               className={cn(btnBase, "h-11 px-4", btnPrimary)}
               title="Add to Cart"
             >
-              {isOutOfStock ? "Out" : "Add"}
+              {isOutOfStock ? "Out of stock" : "Add to Cart"}
             </button>
 
             <button
@@ -848,7 +849,7 @@ export default function ProductDetailPage() {
               disabled={cartLoading || isOutOfStock}
               className={cn(btnBase, "h-11 px-4", btnSecondary)}
             >
-              Buy
+              Buy Now
             </button>
           </div>
         </div>
